@@ -48,7 +48,9 @@ jobs:
 
           file.write_text(code)
           PY
-
+      - name: Fix Camera Permission Callback
+        run: |
+          sed -i 's/Array<out String>/Array<String>/' app/src/main/java/com/xcology/livecamera/MainActivity.kt
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
