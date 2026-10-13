@@ -22,7 +22,33 @@ jobs:
           test -f app/build.gradle.kts
           test -f settings.gradle.kts
 
-      - name: Install Java 17
+      - name:       - name: Fix Gradle Kotlin Compilation Errors
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          file = Path("app/build.gradle.kts")
+          code = file.read_text()
+
+          code = code.replace(
+              "java.net.URI(",
+              "URI("
+          )
+
+          code = code.replace(
+              "java.security.MessageDigest",
+              "MessageDigest"
+          )
+
+          code = (
+              "import java.net.URI\n"
+              "import java.security.MessageDigest\n\n"
+              + code
+          )
+
+          file.write_text(code)
+          print("Gradle Kotlin references corrected")
+          PY
         uses: actions/setup-java@v4
         with:
           distribution: temurin
