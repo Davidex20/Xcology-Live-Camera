@@ -1,4 +1,4 @@
-name: Build Xcology APK
+name: Build Xcology AI Live APK
 
 on:
   push:
@@ -9,71 +9,71 @@ permissions:
   contents: read
 
 jobs:
-  build:
+  build-ai:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 35
     steps:
-      - name: Checkout Project
+      - name: Checkout Xcology repository
         uses: actions/checkout@v4
 
-      - name: Extract Xcology Project
-        run: |
-          unzip -o -q Xcology-Live-Camera-v0.4-Multiclass-Skin-AI.zip
-          test -f app/build.gradle.kts
-          test -f settings.gradle.kts
-
-      - name: Fix Gradle Kotlin Imports
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          file = Path("app/build.gradle.kts")
-          code = file.read_text()
-
-          code = code.replace(
-              "java.net.URI(",
-              "URI("
-          )
-
-          code = code.replace(
-              "java.security.MessageDigest",
-              "MessageDigest"
-          )
-
-          code = (
-              "import java.net.URI\n"
-              "import java.security.MessageDigest\n\n"
-              + code
-          )
-
-          file.write_text(code)
-          PY
-      - name: Fix Camera Permission Callback
-        run: |
-          sed -i 's/Array<out String>/Array<String>/' app/src/main/java/com/xcology/livecamera/MainActivity.kt
-      - name: Setup Java
+      - name: Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Gradle
+      - name: Gradle 8.9 cache
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Install Android SDK
+      - name: Configure Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Download pinned official AI camera example
         run: |
-          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+          git clone https://github.com/DecartAI/decart-example-android-realtime.git ai-source
+          git -C ai-source checkout --detach 634559e75ddc950546624878c0a174ecde47553f
+          test -f ai-source/app/build.gradle.kts
+          test -f ai-source/app/src/main/java/ai/decart/example/MainViewModel.kt
+          test -f ai-source/app/src/main/java/ai/decart/example/ui/CameraScreen.kt
 
-      - name: Build Android APK
-        run: gradle --no-daemon :app:assembleDebug --stacktrace
+      - name: Apply Xcology AI app overrides
+        run: |
+          cp xcology-ai/overrides/MainViewModel.kt ai-source/app/src/main/java/ai/decart/example/MainViewModel.kt
+          cp xcology-ai/overrides/CameraScreen.kt ai-source/app/src/main/java/ai/decart/example/ui/CameraScreen.kt
+          python3 - <<'PY'
+          from pathlib import Path
+          def edit(rel, old, new):
+              p = Path("ai-source") / rel
+              data = p.read_text()
+              count = data.count(old)
+              if count != 1:
+                  raise RuntimeError(f"Expected one match in {rel}, got {count}: {old}")
+              p.write_text(data.replace(old, new))
+          edit("app/build.gradle.kts", 'applicationId = "ai.decart.example"', 'applicationId = "com.xcology.livecamera.ai"')
+          edit("app/build.gradle.kts", 'versionName = "1.0"', 'versionName = "1.1-xcology-ai"')
+          edit("app/src/main/res/values/strings.xml", "Decart Example", "Xcology AI Live")
+          edit("app/src/main/AndroidManifest.xml", 'android:allowBackup="true"', 'android:allowBackup="false"')
+          edit("app/src/main/java/ai/decart/example/MainActivity.kt",
+              '        super.onCreate(savedInstanceState)',
+              '        super.onCreate(savedInstanceState)\n        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)')
+          PY
+          grep -q "streamShareToken" ai-source/app/src/main/java/ai/decart/example/MainViewModel.kt
+          grep -q "setReferenceImage" ai-source/app/src/main/java/ai/decart/example/MainViewModel.kt
+          grep -q "Xcology" ai-source/app/src/main/java/ai/decart/example/ui/CameraScreen.kt
 
-      - name: Upload APK
+      - name: Compile Android APK
+        working-directory: ai-source
+        run: |
+          gradle --no-daemon :app:assembleDebug --stacktrace
+
+      - name: Upload installable APK
         uses: actions/upload-artifact@v4
         with:
-          name: Xcology-v0.4-APK
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: Xcology-AI-Live-APK
+          path: ai-source/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
