@@ -22,7 +22,7 @@ jobs:
           test -f app/build.gradle.kts
           test -f settings.gradle.kts
 
-      - name:       - name: Fix Gradle Kotlin Compilation Errors
+      - name:             - name: Fix Gradle Kotlin Compilation Errors
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -49,6 +49,7 @@ jobs:
           file.write_text(code)
           print("Gradle Kotlin references corrected")
           PY
+             - name: Install Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
